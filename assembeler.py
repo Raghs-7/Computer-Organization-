@@ -34,6 +34,11 @@ FUNCT3 = {
     "jal": "000"
 }
 
+def DtoB(value, bits):
+    if value < 0:
+        value = (1 << bits) + value
+    return bin(value)[2:].zfill(bits)
+
 def INSTRUCTIONTYPE(string):
     a = string.split()[0]
     if a in R:
@@ -49,10 +54,6 @@ def INSTRUCTIONTYPE(string):
     else:
         return 'Unknown'
 
-def TWOCOMPLEMENT(value, bits):
-    if value < 0:
-        value = (1 << bits) + value
-    return format(value, f'0{bits}b')
 
 def SType(string):
     parts = string.split()
@@ -77,7 +78,7 @@ def SType(string):
         func3 = FUNCT3.get(func3)
         if rs1 is None:
             return "Error: Invalid register"
-        imm = TWOCOMPLEMENT(int(offset), 12)
+        imm = DtoB(int(offset), 12)
         imm_high = imm[:7]
         imm_low = imm[7:]
         return f"{imm_high}{rs2}{rs1}{func3}{imm_low}{opcode}"
@@ -87,3 +88,61 @@ def SType(string):
 
 instruction = "sw s3,-4(s0)"
 print(SType(instruction))  
+
+def b_type(instruction, label_map, pc):
+    OPCODE = "1100011"
+    parts = instruction.split()
+    instr = parts[0]
+    operands = parts[1].split(",")
+    rs1 = REGISTERS[operands[0]]
+    rs2 = REGISTERS[operands[1]]
+    imm_value = operands[2]
+    if imm_value in label_map:
+        imm_value = label_map[imm_value] - pc
+    imm_value = int(imm_value)
+    imm_bin = DtoB(imm_value, 13)
+    imm_12   = imm_bin[0]       
+    imm_10_5 = imm_bin[1:7]     
+    imm_4_1  = imm_bin[7:11]    
+    imm_11   = imm_bin[11]      
+    binary_instr = (
+        imm_12 + imm_10_5 + rs2 + rs1 + FUNCT3[instr] +
+        imm_4_1 + imm_11 + OPCODE
+    )
+    return binary_instr
+
+def first_pass(assembly_lines):
+    OPCODE = "1100011"
+    label_map = {}
+    pc = 0
+    for line in assembly_lines:
+        line = line.strip()
+        if ":" in line:
+            label, _ = line.split(":")
+            label_map[label] = pc  
+        else:
+            pc += 4  
+    return label_map
+
+def final():
+    assembly_code = [
+        "beq s0,s1,label1",
+        "label4e: beq zero,zero,label4b",
+        "label1: bne s0,s1,8",
+        "bne s0,s1,label4e",
+        "label4b: bne s0,s1,8",
+        "beq zero,zero,0"
+    ]
+
+    label_map = first_pass(assembly_code)
+    pc = 0
+    for line in assembly_code:
+        line = line.strip()
+        if ":" in line:
+            line = line.split(":")[1].strip()  
+            if not line:  
+                continue 
+        binary = b_type(line, label_map, pc)
+        print(binary)
+        pc += 4
+final()
