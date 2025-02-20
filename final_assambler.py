@@ -116,18 +116,22 @@ with open("result",'w') as f_write:
                 rs2 = data[1]
                 if data[2].isdigit(): # beq x1,x2,3
                     offset = int(data[2])
-                    immidiate = to_twos_complement(offset,12) 
+                    if offset<0:
+                        immidiate = to_twos_complement(offset,12) 
+                    immidiate = format(offset,"013b")
                 else : # beq x1,x2,label
                     new_idx = label_match[data[2]][1]
                     curr_idx = index
                     offset = (new_idx-curr_idx)*4
                     immidiate = to_twos_complement((new_idx-curr_idx)*4,13)
+                print(immidiate)
+                print(offset)
                 imm_12 = immidiate[0]               
                 imm_10_5 = immidiate[2:8]           
                 imm_4_1 = immidiate[8:12]           
                 imm_11 = immidiate[1]   
                 binary_instruction = imm_12 + imm_10_5 + registor_binary(rs2) + registor_binary(rs1) + function_f3(operation) + imm_4_1 + imm_11 + opcode
-                if  -2**11 <= offset <= 2**11 - 1 :
+                if  -2*11 <= offset <= 2*11 - 1 :
                     f_write.write(binary_instruction+'\n')  
                 else :
                     f_write.write("Error: wrong immidiate value3\n")
@@ -160,7 +164,7 @@ with open("result",'w') as f_write:
                     f_write.write("Error: rs1 formate is incorrect7")
                     continue
                 
-                if  -2**11 <= int(offset) <= 2**11 - 1 :
+                if  -2*11 <= int(offset) <= 2*11 - 1 :
                     pass 
                 else :
                     f_write.write("Error: immidiate overflow8")
@@ -213,7 +217,7 @@ with open("result",'w') as f_write:
                 if len(binary_instruction)>32:
                     f_write.write("wrong instruction10\n")
                 else :
-                    if -2**20<=int(offset)<=2**20-2:
+                    if -2*20<=int(offset)<=2*20-2:
                         f_write.write(binary_instruction+'\n') 
                     else :
                         pass                 
