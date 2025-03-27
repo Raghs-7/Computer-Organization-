@@ -149,6 +149,7 @@ def simulate_riscv(input_filename, output_filename):
             addr = base_addr + (i * 4)
             value = memory.get(addr, 0)
             binary_value = to_32bit_binary(value)
-            output_file.write(f"0x{addr:08x}:{binary_value}\n")
+            val = f"{addr:08x}"
+            output_file.write(f"0x{val.upper()}:{binary_value}\n")
 
 simulate_riscv(input_file, output_file)
