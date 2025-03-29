@@ -1,7 +1,5 @@
 import sys
 
-# input_file = "input.txt"
-# output_file = "output.txt"
 input_file = sys.argv[1]
 output_file = sys.argv[2]
 
@@ -11,6 +9,7 @@ with open(input_file) as f:
     lst = [x.strip() for x in f.readlines()]
     for i in range(len(lst)):
         pc_map[i * 4] = lst[i]  
+
 
 registers = [0] * 32  
 memory = {}  
@@ -42,6 +41,26 @@ def decode_r_instruction(funct7, funct3):
     }
     return r_instructions.get((funct7, funct3), "UNKNOWN INSTRUCTION")
 
+def extract_b_type_imm(instruction):
+    imm_12 = get_bits(instruction, 31, 31)  
+    imm_10_5 = get_bits(instruction, 30, 25)  
+    imm_4_1 = get_bits(instruction, 11, 8)  
+    imm_11 = get_bits(instruction, 7, 7)  
+
+    imm_binary = imm_12 + imm_11 + imm_10_5 + imm_4_1 + "0"  
+    imm = sign_extend(int(imm_binary, 2), 13)
+    return imm
+
+def extract_j_type_imm(instruction):
+    imm_20 = get_bits(instruction, 31, 31)  
+    imm_10_1 = get_bits(instruction, 30, 21)  
+    imm_11 = get_bits(instruction, 20, 20)  
+    imm_19_12 = get_bits(instruction, 19, 12)  
+
+    imm_binary = imm_20 + imm_19_12 + imm_11 + imm_10_1 + "0"  
+    imm = sign_extend(int(imm_binary, 2), 21)
+    return imm
+
 def execute_instruction(instruction, output_file):
     global pc
 
@@ -52,11 +71,6 @@ def execute_instruction(instruction, output_file):
         funct3 = get_bits(instruction, 14, 12)
         funct7 = get_bits(instruction, 31, 25)
         opcode = get_bits(instruction, 6, 0)
-        # print("rd->",get_bits(instruction, 11, 7))
-        # print("rs1->",get_bits(instruction, 19, 15))
-        # print("rs2->",get_bits(instruction, 24, 20))
-        # print("func3->",get_bits(instruction, 14, 12))
-        # print("func7->",get_bits(instruction, 31, 25))
 
         # R-type Instructions
         if opcode == "0110011":
@@ -74,57 +88,62 @@ def execute_instruction(instruction, output_file):
             elif operation == "SLT":
                 registers[rd] = int(registers[rs1] < registers[rs2])
             else:
-                raise ValueError(f"Unsupported R-type funct3={funct3}, funct7={funct7}")
+                print("Unkown operation at pc =",pc)
 
             if rd == 0:  
                 registers[0] = 0  
             pc += 4
+            binary_registers = [to_32bit_binary(reg) for reg in registers]
+            output_file.write(f"{to_32bit_binary(pc)} {' '.join(binary_registers)}\n")
 
         # I-type Instructions 
         elif opcode in ["0010011", "0000011", "1100111"]:
             imm = sign_extend(int(get_bits(instruction, 31, 20), 2), 12)
-            # print("imm->",imm)
             if opcode == "0010011":  # ADDI
                 registers[rd] = registers[rs1] + imm
+                pc += 4
             elif opcode == "0000011":  # LW
                 address = registers[rs1] + imm
                 registers[rd] = memory.get(address, 0)
+                pc += 4
             elif opcode == "1100111":  # JALR
                 temp = pc + 4
                 pc = (registers[rs1] + imm) & ~1
                 registers[rd] = temp
             if rd == 0:
                 registers[0] = 0
-            pc += 4
+            binary_registers = [to_32bit_binary(reg) for reg in registers]
+            output_file.write(f"{to_32bit_binary(pc)} {' '.join(binary_registers)}\n")
 
         # S-type 
         elif opcode == "0100011":
             imm = sign_extend(int(get_bits(instruction, 31, 25) + get_bits(instruction, 11, 7), 2), 12)
-            # print("imm->",imm)
             if funct3 == "010":  # SW
                 address = registers[rs1] + imm
                 memory[address] = registers[rs2]
             pc += 4
+            binary_registers = [to_32bit_binary(reg) for reg in registers]
+            output_file.write(f"{to_32bit_binary(pc)} {' '.join(binary_registers)}\n")
 
         # B-type (BEQ, BNE)
         elif opcode == "1100011":
-            imm = sign_extend(int(get_bits(instruction, 31, 31) + get_bits(instruction, 7, 7) + get_bits(instruction, 30, 25) + get_bits(instruction, 11, 8), 2), 13)
-            # print("imm->",imm)
+            imm = extract_b_type_imm(instruction)  
             should_branch = (registers[rs1] == registers[rs2]) if funct3 == "000" else (registers[rs1] != registers[rs2])
             pc = pc + imm if should_branch else pc + 4
+            binary_registers = [to_32bit_binary(reg) for reg in registers]
+            output_file.write(f"{to_32bit_binary(pc)} {' '.join(binary_registers)}\n")
 
-        # J-type (JAL)
-        elif opcode == "1101111":
-            imm = sign_extend(int(get_bits(instruction, 31, 31) + get_bits(instruction, 30, 21) + get_bits(instruction, 20, 20) + get_bits(instruction, 19, 12), 2), 20)
-            imm = imm << 1
-            # print("imm->", imm)
-            registers[rd] = pc + 4
-            if rd == 0:
-                registers[0] = 0
-            pc += imm
 
-        binary_registers = [to_32bit_binary(reg) for reg in registers]
-        output_file.write(f"{to_32bit_binary(pc)} {' '.join(binary_registers)}\n")
+        elif opcode == "1101111":  # JAL
+            imm = extract_j_type_imm(instruction)  
+            if rd != 0:  
+                registers[rd] = pc + 4
+            registers[0] = 0  
+            pc += imm  
+
+            binary_registers = [to_32bit_binary(reg) for reg in registers]
+            output_file.write(f"{to_32bit_binary(pc)} {' '.join(binary_registers)}\n")
+            
 
     except Exception as e:
         print(f"Exception at PC={pc}: {str(e)}\n")
@@ -135,6 +154,7 @@ def simulate_riscv(output_filename):
 
     pc = 0
     registers = [0] * 32
+    registers[2] = 380
     memory = {}
 
     with open(output_filename, 'w') as output_file:
@@ -144,7 +164,7 @@ def simulate_riscv(output_filename):
             except:
                 print("error at pc =",pc)
                 break
-            print("executing instruction in",instruction,"at pc =",pc)
+            # print("executing instruction in",instruction,"at pc =",pc)
             execute_instruction(instruction, output_file)
 
             opcode = get_bits(instruction, 6, 0)
@@ -158,6 +178,8 @@ def simulate_riscv(output_filename):
                 imm = sign_extend(int(get_bits(instruction, 31, 31) + get_bits(instruction, 7, 7) + get_bits(instruction, 30, 25) + get_bits(instruction, 11, 8), 2), 13)
                 if imm == 0:
                     break
+            
+            # print(registers)
 
         base_addr = 0x00010000
         for i in range(32): 
